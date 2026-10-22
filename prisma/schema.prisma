@@ -1,0 +1,579 @@
+// College ERP — Prisma Schema
+// Derived from: APK reverse-engineering of Mastersoft base.apk
+// Independent implementation — not affiliated with Mastersoft ERP Pvt Ltd
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  FACULTY
+  ADMIN
+  STAFF
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum GatePassStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  USED
+}
+
+enum FeeStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+  WAIVED
+}
+
+enum ExamStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum NoticeAudience {
+  ALL
+  STUDENTS
+  FACULTY
+  STAFF
+  DEPARTMENT
+}
+
+enum GrievanceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum PaymentMethod {
+  ONLINE
+  CASH
+  DD
+  SCHOLARSHIP
+}
+
+// ─── Core User & Auth ─────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  role          Role
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  student       Student?
+  faculty       Faculty?
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  noticesCreated Notice[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Academic Structure ───────────────────────────────────────────────────────
+
+model Department {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  code        String    @unique
+  hodId       String?
+  createdAt   DateTime  @default(now())
+
+  courses     Course[]
+  students    Student[]
+  faculty     Faculty[]
+  timetables  Timetable[]
+}
+
+model Course {
+  id             String    @id @default(cuid())
+  name           String
+  code           String    @unique
+  departmentId   String
+  credits        Int       @default(3)
+  semester       Int
+  isElective     Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+
+  department     Department @relation(fields: [departmentId], references: [id])
+  attendanceRecords AttendanceRecord[]
+  enrollments    CourseEnrollment[]
+  timetableSlots TimetableSlot[]
+  examSubjects   ExamSubject[]
+  markEntries    MarkEntry[]
+}
+
+model AcademicSession {
+  id          String    @id @default(cuid())
+  name        String    // e.g. "2024-25 Even Semester"
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  students    Student[]
+  timetables  Timetable[]
+  exams       Exam[]
+  feeInvoices FeeInvoice[]
+}
+
+// ─── Student ──────────────────────────────────────────────────────────────────
+
+model Student {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  enrollmentNo      String    @unique
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime?
+  gender            Gender?
+  phone             String?
+  address           String?
+  city              String?
+  state             String?
+  pincode           String?
+  parentName        String?
+  parentPhone       String?
+  photoUrl          String?
+  departmentId      String
+  currentSemester   Int       @default(1)
+  academicSessionId String?
+  admissionYear     Int
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department        Department @relation(fields: [departmentId], references: [id])
+  academicSession   AcademicSession? @relation(fields: [academicSessionId], references: [id])
+  attendanceRecords AttendanceRecord[]
+  leaveApplications LeaveApplication[]
+  gatePasses        GatePass[]
+  feeInvoices       FeeInvoice[]
+  examRegistrations ExamRegistration[]
+  markEntries       MarkEntry[]
+  courseEnrollments CourseEnrollment[]
+  scholarships      Scholarship[]
+  grievances        Grievance[]
+  feedbacks         Feedback[]
+  permissionRequests PermissionRequest[]
+  exemptions        Exemption[]
+  inOutRecords      InOutRecord[]
+}
+
+// ─── Faculty ──────────────────────────────────────────────────────────────────
+
+model Faculty {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  employeeId     String    @unique
+  firstName      String
+  lastName       String
+  designation    String?
+  qualification  String?
+  phone          String?
+  address        String?
+  photoUrl       String?
+  departmentId   String
+  joiningDate    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department     Department @relation(fields: [departmentId], references: [id])
+  timetableSlots TimetableSlot[]
+  attendanceMarked AttendanceRecord[] @relation("MarkedBy")
+  leaveApprovals LeaveApplication[] @relation("ApprovedByFaculty")
+  paySlips       PaySlip[]
+  serviceBook    ServiceBook?
+  gatePassApprovals GatePass[] @relation("ApprovedByFaculty")
+  permissionApprovals PermissionRequest[] @relation("ApprovedByFaculty")
+  markEntries    MarkEntry[] @relation("EnteredByFaculty")
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+model AttendanceRecord {
+  id          String           @id @default(cuid())
+  studentId   String
+  courseId    String
+  date        DateTime
+  period      Int              @default(1)
+  status      AttendanceStatus @default(ABSENT)
+  markedById  String?
+  remarks     String?
+  createdAt   DateTime         @default(now())
+
+  student     Student  @relation(fields: [studentId], references: [id])
+  course      Course   @relation(fields: [courseId], references: [id])
+  markedBy    Faculty? @relation("MarkedBy", fields: [markedById], references: [id])
+
+  @@unique([studentId, courseId, date, period])
+}
+
+model InOutRecord {
+  id          String   @id @default(cuid())
+  studentId   String
+  checkIn     DateTime?
+  checkOut    DateTime?
+  date        DateTime @default(now())
+  remarks     String?
+
+  student     Student  @relation(fields: [studentId], references: [id])
+}
+
+// ─── Leave & Permissions ──────────────────────────────────────────────────────
+
+model LeaveApplication {
+  id           String      @id @default(cuid())
+  studentId    String
+  fromDate     DateTime
+  toDate       DateTime
+  reason       String
+  status       LeaveStatus @default(PENDING)
+  approvedById String?
+  approverNote String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  student      Student  @relation(fields: [studentId], references: [id])
+  approvedBy   Faculty? @relation("ApprovedByFaculty", fields: [approvedById], references: [id])
+}
+
+model PermissionRequest {
+  id           String      @id @default(cuid())
+  studentId    String
+  date         DateTime
+  fromTime     String
+  toTime       String
+  reason       String
+  status       LeaveStatus @default(PENDING)
+  approvedById String?
+  approverNote String?
+  createdAt    DateTime    @default(now())
+
+  student      Student  @relation(fields: [studentId], references: [id])
+  approvedBy   Faculty? @relation("ApprovedByFaculty", fields: [approvedById], references: [id])
+}
+
+// ─── Gate Pass ────────────────────────────────────────────────────────────────
+
+model GatePass {
+  id           String        @id @default(cuid())
+  studentId    String
+  reason       String
+  outDate      DateTime
+  returnDate   DateTime?
+  status       GatePassStatus @default(PENDING)
+  approvedById String?
+  approverNote String?
+  qrCode       String?
+  usedAt       DateTime?
+  createdAt    DateTime      @default(now())
+
+  student      Student  @relation(fields: [studentId], references: [id])
+  approvedBy   Faculty? @relation("ApprovedByFaculty", fields: [approvedById], references: [id])
+}
+
+// ─── Fees ─────────────────────────────────────────────────────────────────────
+
+model FeeInvoice {
+  id                String    @id @default(cuid())
+  studentId         String
+  academicSessionId String
+  invoiceNo         String    @unique
+  totalAmount       Float
+  paidAmount        Float     @default(0)
+  dueDate           DateTime
+  status            FeeStatus @default(PENDING)
+  createdAt         DateTime  @default(now())
+
+  student           Student         @relation(fields: [studentId], references: [id])
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id])
+  items             FeeItem[]
+  payments          Payment[]
+}
+
+model FeeItem {
+  id          String @id @default(cuid())
+  invoiceId   String
+  description String
+  amount      Float
+  category    String // Tuition, Hostel, Library, etc.
+
+  invoice     FeeInvoice @relation(fields: [invoiceId], references: [id])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  invoiceId     String
+  amount        Float
+  method        PaymentMethod
+  transactionId String?
+  receiptNo     String        @unique
+  paidAt        DateTime      @default(now())
+  remarks       String?
+
+  invoice       FeeInvoice @relation(fields: [invoiceId], references: [id])
+}
+
+// ─── Examinations ─────────────────────────────────────────────────────────────
+
+model Exam {
+  id                String    @id @default(cuid())
+  name              String    // Mid-Term, End-Term, etc.
+  academicSessionId String
+  startDate         DateTime
+  endDate           DateTime
+  status            ExamStatus @default(SCHEDULED)
+  createdAt         DateTime  @default(now())
+
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id])
+  subjects          ExamSubject[]
+  registrations     ExamRegistration[]
+}
+
+model ExamSubject {
+  id          String   @id @default(cuid())
+  examId      String
+  courseId    String
+  date        DateTime
+  startTime   String
+  endTime     String
+  room        String?
+  maxMarks    Int      @default(100)
+  passingMarks Int     @default(40)
+
+  exam        Exam   @relation(fields: [examId], references: [id])
+  course      Course @relation(fields: [courseId], references: [id])
+  markEntries MarkEntry[]
+}
+
+model ExamRegistration {
+  id         String   @id @default(cuid())
+  studentId  String
+  examId     String
+  registeredAt DateTime @default(now())
+  hallTicketNo String? @unique
+
+  student    Student @relation(fields: [studentId], references: [id])
+  exam       Exam    @relation(fields: [examId], references: [id])
+
+  @@unique([studentId, examId])
+}
+
+model MarkEntry {
+  id            String @id @default(cuid())
+  studentId     String
+  courseId      String
+  examSubjectId String?
+  marksObtained Float
+  maxMarks      Float  @default(100)
+  type          String // Internal, External, Assignment
+  enteredById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student       Student      @relation(fields: [studentId], references: [id])
+  course        Course       @relation(fields: [courseId], references: [id])
+  examSubject   ExamSubject? @relation(fields: [examSubjectId], references: [id])
+  enteredBy     Faculty?     @relation("EnteredByFaculty", fields: [enteredById], references: [id])
+}
+
+// ─── Timetable ────────────────────────────────────────────────────────────────
+
+model Timetable {
+  id                String @id @default(cuid())
+  departmentId      String
+  academicSessionId String
+  semester          Int
+  createdAt         DateTime @default(now())
+
+  department        Department      @relation(fields: [departmentId], references: [id])
+  academicSession   AcademicSession @relation(fields: [academicSessionId], references: [id])
+  slots             TimetableSlot[]
+}
+
+model TimetableSlot {
+  id          String @id @default(cuid())
+  timetableId String
+  courseId    String
+  facultyId   String?
+  dayOfWeek   Int    // 0=Mon, 6=Sun
+  startTime   String
+  endTime     String
+  room        String?
+
+  timetable   Timetable @relation(fields: [timetableId], references: [id])
+  course      Course    @relation(fields: [courseId], references: [id])
+  faculty     Faculty?  @relation(fields: [facultyId], references: [id])
+}
+
+// ─── Notices ──────────────────────────────────────────────────────────────────
+
+model Notice {
+  id          String         @id @default(cuid())
+  title       String
+  content     String
+  audience    NoticeAudience @default(ALL)
+  authorId    String
+  isPinned    Boolean        @default(false)
+  expiresAt   DateTime?
+  createdAt   DateTime       @default(now())
+
+  author      User @relation(fields: [authorId], references: [id])
+}
+
+// ─── Feedback & Grievance ─────────────────────────────────────────────────────
+
+model Feedback {
+  id         String   @id @default(cuid())
+  studentId  String
+  subject    String
+  message    String
+  rating     Int?     // 1-5
+  createdAt  DateTime @default(now())
+
+  student    Student @relation(fields: [studentId], references: [id])
+}
+
+model Grievance {
+  id          String          @id @default(cuid())
+  studentId   String
+  subject     String
+  description String
+  status      GrievanceStatus @default(OPEN)
+  resolution  String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  student     Student @relation(fields: [studentId], references: [id])
+}
+
+// ─── Course Registration & Enrollment ────────────────────────────────────────
+
+model CourseEnrollment {
+  id         String   @id @default(cuid())
+  studentId  String
+  courseId   String
+  semester   Int
+  enrolledAt DateTime @default(now())
+
+  student    Student @relation(fields: [studentId], references: [id])
+  course     Course  @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId, semester])
+}
+
+// ─── Scholarship ──────────────────────────────────────────────────────────────
+
+model Scholarship {
+  id          String      @id @default(cuid())
+  studentId   String
+  name        String
+  amount      Float
+  status      LeaveStatus @default(PENDING)
+  appliedAt   DateTime    @default(now())
+  remarks     String?
+
+  student     Student @relation(fields: [studentId], references: [id])
+}
+
+// ─── Exemption ────────────────────────────────────────────────────────────────
+
+model Exemption {
+  id          String      @id @default(cuid())
+  studentId   String
+  subject     String
+  reason      String
+  status      LeaveStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+
+  student     Student @relation(fields: [studentId], references: [id])
+}
+
+// ─── Faculty Pay Slip & Service Book ─────────────────────────────────────────
+
+model PaySlip {
+  id           String   @id @default(cuid())
+  facultyId    String
+  month        Int
+  year         Int
+  basicPay     Float
+  allowances   Float    @default(0)
+  deductions   Float    @default(0)
+  netPay       Float
+  generatedAt  DateTime @default(now())
+
+  faculty      Faculty @relation(fields: [facultyId], references: [id])
+
+  @@unique([facultyId, month, year])
+}
+
+model ServiceBook {
+  id           String   @id @default(cuid())
+  facultyId    String   @unique
+  joiningDate  DateTime
+  designation  String
+  department   String
+  increments   Json?    // Array of increment records
+  promotions   Json?    // Array of promotion records
+  updatedAt    DateTime @updatedAt
+
+  faculty      Faculty @relation(fields: [facultyId], references: [id])
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entity     String
+  entityId   String?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user       User @relation(fields: [userId], references: [id])
+}

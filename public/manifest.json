@@ -1,0 +1,45 @@
+{
+  "name": "Campus ERP",
+  "short_name": "Campus ERP",
+  "description": "Your college in your pocket — attendance, assignments, fees, timetable and more.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0a0f1e",
+  "theme_color": "#7c3aed",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Attendance",
+      "url": "/dashboard/attendance",
+      "description": "View your attendance"
+    },
+    {
+      "name": "Assignments",
+      "url": "/dashboard/assignments",
+      "description": "View your assignments"
+    },
+    {
+      "name": "Timetable",
+      "url": "/dashboard/timetable",
+      "description": "View your timetable"
+    }
+  ]
+}
